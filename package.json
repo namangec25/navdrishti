@@ -1,0 +1,21 @@
+{
+  "name": "navdrishti",
+  "version": "1.0.0",
+  "description": "NavDrishti - One Step at a Time Navigation for Children",
+  "scripts": {
+    "server": "node server/server.js",
+    "guardian": "cd guardian-app && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run guardian\"",
+    "install:all": "npm install && cd guardian-app && npm install"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "sql.js": "^1.10.0",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.0"
+  }
+}

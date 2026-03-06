@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NavDrishti Watch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="watch-frame">
+        <div class="watch-bezel">
+            <div class="watch-screen" id="watchScreen">
+                <!-- Screens are injected dynamically by app.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Demo control panel (outside watch) -->
+    <div class="demo-panel">
+        <h2>🧭 NavDrishti Watch Simulator</h2>
+        <p>This simulates the child's smartwatch experience.</p>
+
+        <!-- Connected Status -->
+        <div class="demo-info" style="border: 1px solid rgba(16,185,129,0.3); background: rgba(16,185,129,0.08);">
+            <p style="color: #34d399; font-weight: 800;">🔗 Connected to Guardian App</p>
+            <p>Routes created by parents appear here automatically.</p>
+            <a href="http://localhost:5173" target="_blank" rel="noopener noreferrer" class="demo-btn"
+                style="display: inline-block; margin-top: 8px; text-decoration: none; text-align: center; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none;">
+                🧑‍🦱 Open Guardian App
+            </a>
+        </div>
+
+        <div class="demo-info">
+            <p><strong>Child ID:</strong> <span id="childIdDisplay">-</span></p>
+            <p><strong>Status:</strong> <span id="statusDisplay">Loading...</span></p>
+        </div>
+        <div class="demo-controls">
+            <button onclick="simulateStepComplete()" class="demo-btn">📍 Simulate Arrival</button>
+            <button onclick="loadRoutes()" class="demo-btn">🔄 Refresh Routes</button>
+        </div>
+        <p class="demo-hint">ℹ️ Add <code>?child=ID</code> to the URL to load a specific child's routes.</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
