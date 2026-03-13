@@ -14,6 +14,8 @@ import RouteEditor from './pages/RouteEditor';
 import RoutesPage from './pages/RoutesPage';
 import LiveTracking from './pages/LiveTracking';
 import ChildrenPage from './pages/ChildrenPage';
+import NotificationsPage from './pages/NotificationsPage';
+import api from './api';
 
 // ---- Auth Context ----
 export const AuthContext = createContext(null);
@@ -68,6 +70,7 @@ function App() {
                     <Route path="/routes/:id" element={user ? <AppLayout><RouteEditor /></AppLayout> : <Navigate to="/login" />} />
                     <Route path="/tracking" element={user ? <AppLayout><LiveTracking /></AppLayout> : <Navigate to="/login" />} />
                     <Route path="/children" element={user ? <AppLayout><ChildrenPage /></AppLayout> : <Navigate to="/login" />} />
+                    <Route path="/notifications" element={user ? <AppLayout><NotificationsPage /></AppLayout> : <Navigate to="/login" />} />
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
             </BrowserRouter>
@@ -81,14 +84,29 @@ function AppLayout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
 
+    const WATCH_URL = 'http://localhost:3001/watch';
+
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    useEffect(() => {
+        const fetchUnread = async () => {
+            try {
+                const res = await api.get('/notifications/unread-count');
+                setUnreadCount(res.data.unread_count || 0);
+            } catch { }
+        };
+        fetchUnread();
+        const interval = setInterval(fetchUnread, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
     const navItems = [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/routes', label: 'Routes', icon: '🗺️' },
         { path: '/children', label: 'Children', icon: '👧' },
         { path: '/tracking', label: 'Live Tracking', icon: '📍' },
+        { path: '/notifications', label: 'Notifications', icon: '🔔', badge: unreadCount },
     ];
-
-    const WATCH_URL = 'http://localhost:3001/watch';
 
     return (
         <div className="app-layout">
@@ -107,6 +125,9 @@ function AppLayout({ children }) {
                         >
                             <span className="nav-icon">{item.icon}</span>
                             {item.label}
+                            {item.badge > 0 && (
+                                <span className="nav-badge">{item.badge > 99 ? '99+' : item.badge}</span>
+                            )}
                         </button>
                     ))}
 

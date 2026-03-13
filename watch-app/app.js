@@ -22,6 +22,7 @@ let childId = null;
 let routes = [];
 let currentRoute = null;
 let currentStep = 0;
+let currentPosition = null; // { latitude, longitude }
 
 // Default destination icons for routes without images
 const DESTINATION_ICONS = [
@@ -39,6 +40,7 @@ function init() {
     childIdDisplay.textContent = childId;
 
     loadRoutes();
+    startLocationTracking(); // Start sending GPS location to backend
 }
 
 // ---- Load Routes from Backend ----
@@ -142,6 +144,9 @@ function startNavigation(routeIndex) {
     currentRoute = routes[routeIndex];
     currentStep = 0;
     showNavigationStep();
+
+    // Notify parent that navigation has started
+    sendNotification('navigation_start', `Started navigating to ${currentRoute.route_name}`);
 }
 
 function showNavigationStep() {
@@ -265,6 +270,11 @@ function startGPSTracking() {
 
     navigator.geolocation.watchPosition(
         (pos) => {
+            currentPosition = {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude
+            };
+
             if (!currentRoute) return;
             const wp = currentRoute.waypoints[currentStep];
             if (!wp) return;
@@ -289,6 +299,30 @@ function startGPSTracking() {
     );
 }
 
+// ---- Continuous location sending to backend ----
+function startLocationTracking() {
+    // Start GPS tracking for position updates
+    startGPSTracking();
+
+    // Send location to server every 10 seconds
+    setInterval(async () => {
+        if (!currentPosition) return;
+        try {
+            await fetch(`${API_BASE}/api/public/location`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    child_id: childId,
+                    latitude: currentPosition.latitude,
+                    longitude: currentPosition.longitude
+                })
+            });
+        } catch (err) {
+            console.error('Failed to send location:', err);
+        }
+    }, 10000);
+}
+
 function haversineDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -303,6 +337,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 // SCREEN: Complete
 // ============================================================
 function showComplete() {
+    const routeName = currentRoute ? currentRoute.route_name : 'destination';
     currentRoute = null;
     currentStep = 0;
 
@@ -313,6 +348,9 @@ function showComplete() {
       <div class="complete-sub">Great job! 🌟</div>
     </div>
   `;
+
+    // Notify parent that navigation is complete
+    sendNotification('navigation_complete', `Safely arrived at ${routeName}`);
 
     // Speak congratulations
     speakText('Great job! You made it!');
@@ -350,6 +388,9 @@ function showSOS() {
     </div>
   `;
 
+    // Send SOS notification to parent with location
+    sendNotification('sos', '🚨 SOS! Child needs help immediately!', true);
+
     speakText('Help has been sent. Stay where you are.');
 }
 
@@ -384,6 +425,30 @@ function getInstructionEmoji(text) {
     if (t.includes('park')) return '🌳';
     if (t.includes('reach') || t.includes('arrived')) return '🎉';
     return '📍';
+}
+
+// ============================================================
+// Send Notification to Backend
+// ============================================================
+async function sendNotification(type, message, includeLocation = false) {
+    try {
+        const payload = { child_id: childId, type, message };
+
+        // Include location if available
+        if (includeLocation && currentPosition) {
+            payload.latitude = currentPosition.latitude;
+            payload.longitude = currentPosition.longitude;
+        }
+
+        await fetch(`${API_BASE}/api/public/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        console.log(`Notification sent: [${type}] ${message}`);
+    } catch (err) {
+        console.error('Failed to send notification:', err);
+    }
 }
 
 // ---- Start! ----

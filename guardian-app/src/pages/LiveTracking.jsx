@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import api from '../api';
 
@@ -18,15 +19,18 @@ L.Icon.Default.mergeOptions({
 });
 
 export default function LiveTracking() {
+    const [searchParams] = useSearchParams();
     const mapRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const childMarkerRef = useRef(null);
+    const sosMarkerRef = useRef(null);
 
     const [children, setChildren] = useState([]);
-    const [selectedChild, setSelectedChild] = useState('');
+    const [selectedChild, setSelectedChild] = useState(searchParams.get('child') || '');
     const [routes, setRoutes] = useState([]);
-    const [trackingActive, setTrackingActive] = useState(false);
+    const [trackingActive, setTrackingActive] = useState(!!searchParams.get('child'));
     const [lastLocation, setLastLocation] = useState(null);
+    const [sosAlert, setSosAlert] = useState(null);
 
     // Initialize map
     useEffect(() => {
@@ -66,11 +70,11 @@ export default function LiveTracking() {
         }
     }, [selectedChild]);
 
-    // Simulate tracking (in a real app, this would poll the location API)
+    // Simulate tracking (polls the location API every 3s)
     useEffect(() => {
         if (!trackingActive || !selectedChild) return;
 
-        const interval = setInterval(async () => {
+        const fetchLocation = async () => {
             try {
                 const res = await api.get(`/location/latest/${selectedChild}`);
                 const loc = res.data.location;
@@ -104,7 +108,23 @@ export default function LiveTracking() {
             } catch {
                 // No location data yet
             }
-        }, 3000);
+        };
+
+        // Also check for SOS alerts
+        const checkSOS = async () => {
+            try {
+                const res = await api.get('/notifications');
+                const notifications = res.data.notifications || [];
+                const latestSOS = notifications.find(
+                    n => n.type === 'sos' && n.child_id === parseInt(selectedChild) && !n.is_read
+                );
+                setSosAlert(latestSOS || null);
+            } catch { }
+        };
+
+        fetchLocation();
+        checkSOS();
+        const interval = setInterval(() => { fetchLocation(); checkSOS(); }, 3000);
 
         return () => clearInterval(interval);
     }, [trackingActive, selectedChild]);
@@ -173,6 +193,24 @@ export default function LiveTracking() {
                     <div className="tracking-status online" style={{ marginTop: '1rem', width: 'fit-content' }}>
                         <div className="pulse-dot green"></div>
                         Tracking active — updating every 3 seconds
+                    </div>
+                )}
+
+                {sosAlert && (
+                    <div style={{
+                        marginTop: '1rem', padding: '0.75rem 1rem',
+                        background: 'rgba(239,68,68,0.15)', borderRadius: 'var(--radius-md)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        animation: 'sos-pulse 2s ease-in-out infinite'
+                    }}>
+                        <span style={{ fontSize: '1.5rem' }}>🚨</span>
+                        <div>
+                            <strong style={{ color: '#ef4444' }}>SOS ALERT!</strong>
+                            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', margin: 0 }}>
+                                {sosAlert.message} — {new Date(sosAlert.created_at).toLocaleTimeString()}
+                            </p>
+                        </div>
                     </div>
                 )}
 

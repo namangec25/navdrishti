@@ -9,7 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDB, queryAll } = require('./db');
+const { initDB, queryAll, queryOne, runSql } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +37,7 @@ app.use('/api/children', require('./routes/children'));
 app.use('/api/routes', require('./routes/routes'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/upload', require('./routes/upload'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // ---- Health check ----
 app.get('/api/health', (req, res) => {
@@ -62,6 +63,57 @@ app.get('/api/public/routes/:childId', (req, res) => {
         res.json({ routes: routesWithWaypoints });
     } catch (err) {
         console.error('Public routes error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ---- Public notification endpoint for watch app (no auth needed) ----
+app.post('/api/public/notifications', (req, res) => {
+    try {
+        const { child_id, type, message, latitude, longitude } = req.body;
+        if (!child_id || !type || !message) {
+            return res.status(400).json({ error: 'child_id, type, and message are required' });
+        }
+
+        // Verify child exists
+        const child = queryOne('SELECT id FROM children WHERE id = ?', [parseInt(child_id)]);
+        if (!child) return res.status(404).json({ error: 'Child not found' });
+
+        runSql(
+            'INSERT INTO notifications (child_id, type, message, latitude, longitude) VALUES (?, ?, ?, ?, ?)',
+            [parseInt(child_id), type, message, latitude || null, longitude || null]
+        );
+
+        // Also log the location if provided
+        if (latitude !== undefined && longitude !== undefined) {
+            runSql(
+                'INSERT INTO location_logs (child_id, latitude, longitude) VALUES (?, ?, ?)',
+                [parseInt(child_id), latitude, longitude]
+            );
+        }
+
+        res.status(201).json({ message: 'Notification sent' });
+    } catch (err) {
+        console.error('Public notification error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ---- Public location update endpoint for watch app (no auth needed) ----
+app.post('/api/public/location', (req, res) => {
+    try {
+        const { child_id, latitude, longitude } = req.body;
+        if (!child_id || latitude === undefined || longitude === undefined) {
+            return res.status(400).json({ error: 'child_id, latitude, and longitude are required' });
+        }
+
+        runSql(
+            'INSERT INTO location_logs (child_id, latitude, longitude) VALUES (?, ?, ?)',
+            [parseInt(child_id), latitude, longitude]
+        );
+        res.status(201).json({ message: 'Location logged' });
+    } catch (err) {
+        console.error('Public location error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
