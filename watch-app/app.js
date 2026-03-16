@@ -3,13 +3,7 @@
 // ============================================================
 // Simulates a Wear OS watch interface for children.
 // Loads routes from the backend, shows one step at a time.
-// Uses GPS proximity (or manual simulation) to advance steps.
-//
-// Design Principles:
-//   - NO reading required
-//   - Large icons & bright colors
-//   - Voice-first guidance
-//   - One instruction at a time
+// Design: NO reading required, large icons, voice-first.
 // ============================================================
 
 const API_BASE = window.location.origin;
@@ -19,28 +13,45 @@ const statusDisplay = document.getElementById('statusDisplay');
 
 // ---- State ----
 let childId = null;
+let childProfile = null; // { name, avatar, age, parent_name, parent_phone, address }
 let routes = [];
 let currentRoute = null;
 let currentStep = 0;
 let currentPosition = null; // { latitude, longitude }
 
-// Default destination icons for routes without images
 const DESTINATION_ICONS = [
     { icon: '🏫', label: 'School', colorClass: 'school' },
-    { icon: '🏠', label: 'Home', colorClass: 'home' },
+    { icon: '🏠', label: 'Home',   colorClass: 'home' },
     { icon: '🚌', label: 'Bus Stop', colorClass: 'bus' },
-    { icon: '🌳', label: 'Park', colorClass: 'park' },
+    { icon: '🌳', label: 'Park',   colorClass: 'park' },
 ];
 
 // ---- Initialize ----
 function init() {
-    // Get child ID from URL params
     const params = new URLSearchParams(window.location.search);
     childId = params.get('child') || '1';
-    childIdDisplay.textContent = childId;
+    childIdDisplay.textContent = `Child #${childId}`;
 
+    loadProfile();
     loadRoutes();
-    startLocationTracking(); // Start sending GPS location to backend
+    startLocationTracking();
+}
+
+// ---- Load Child Profile ----
+async function loadProfile() {
+    try {
+        const res = await fetch(`${API_BASE}/api/public/child/${childId}`);
+        if (res.ok) {
+            const data = await res.json();
+            childProfile = data.child;
+            // Update display with child name
+            if (childProfile && childProfile.name) {
+                childIdDisplay.textContent = `${childProfile.avatar || '👦'} ${childProfile.name}`;
+            }
+        }
+    } catch (err) {
+        console.log('Could not load profile (demo mode)');
+    }
 }
 
 // ---- Load Routes from Backend ----
@@ -59,20 +70,17 @@ async function loadRoutes() {
             statusDisplay.textContent = `${routes.length} route(s) loaded`;
         }
     } catch (err) {
-        console.error('Failed to load routes:', err);
-        // Show demo mode with sample data
         routes = getDemoRoutes();
         showHomeScreen();
-        statusDisplay.textContent = 'Demo mode (no server)';
+        statusDisplay.textContent = 'Demo mode';
     }
 }
 
-// ---- Demo Routes (fallback when no server) ----
+// ---- Demo Routes ----
 function getDemoRoutes() {
     return [
         {
-            id: 'demo-1',
-            route_name: 'School',
+            id: 'demo-1', route_name: 'School',
             waypoints: [
                 { step_number: 1, instruction_text: 'Walk to the gate', image_url: null, voice_url: null, latitude: 28.614, longitude: 77.209 },
                 { step_number: 2, instruction_text: 'Turn left at the big tree', image_url: null, voice_url: null, latitude: 28.615, longitude: 77.210 },
@@ -81,71 +89,113 @@ function getDemoRoutes() {
             ]
         },
         {
-            id: 'demo-2',
-            route_name: 'Home',
+            id: 'demo-2', route_name: 'Home',
             waypoints: [
                 { step_number: 1, instruction_text: 'Walk out of school gate', image_url: null, voice_url: null, latitude: 28.617, longitude: 77.212 },
                 { step_number: 2, instruction_text: 'Turn right at the shop', image_url: null, voice_url: null, latitude: 28.616, longitude: 77.211 },
                 { step_number: 3, instruction_text: 'You are home!', image_url: null, voice_url: null, latitude: 28.614, longitude: 77.209 },
             ]
         },
-        {
-            id: 'demo-3',
-            route_name: 'Bus Stop',
-            waypoints: [
-                { step_number: 1, instruction_text: 'Walk straight on the path', image_url: null, voice_url: null, latitude: 28.614, longitude: 77.209 },
-                { step_number: 2, instruction_text: 'The bus stop is on your right', image_url: null, voice_url: null, latitude: 28.615, longitude: 77.208 },
-            ]
-        }
     ];
 }
 
 // ============================================================
-// SCREEN: Home (Destination Selection)
+// SCREEN: Home
 // ============================================================
 function showHomeScreen() {
     let buttonsHtml = '';
     routes.forEach((route, i) => {
         const dest = DESTINATION_ICONS[i % DESTINATION_ICONS.length];
-        const iconToShow = dest.icon;
-        const label = route.route_name || dest.label;
         buttonsHtml += `
       <button class="dest-btn ${dest.colorClass}" onclick="startNavigation(${i})">
-        <span class="dest-icon">${iconToShow}</span>
-        ${label}
+        <span class="dest-icon">${dest.icon}</span>
+        ${route.route_name || dest.label}
       </button>
     `;
     });
 
-    // Add SOS button if fewer than 4 routes
-    if (routes.length < 4) {
-        buttonsHtml += `
+    // Always show SOS
+    buttonsHtml += `
       <button class="dest-btn" style="background: linear-gradient(135deg, #ef4444, #b91c1c);" onclick="showSOS()">
         <span class="dest-icon">🆘</span>
         HELP
       </button>
     `;
-    }
+
+    const firstName = childProfile?.name ? childProfile.name.split(' ')[0] : 'There';
 
     watchScreen.innerHTML = `
     <div class="home-screen">
-      <div class="home-title">Where to?</div>
+      <div class="home-title">Hi ${firstName}! 👋<br><span style="font-size:14px;opacity:0.7">Where to?</span></div>
       <div class="destination-grid">
         ${buttonsHtml}
       </div>
+      <button class="profile-btn" onclick="showProfile()" title="My Profile">
+        👤
+      </button>
     </div>
   `;
 }
 
 // ============================================================
-// SCREEN: Navigation (Step-by-Step)
+// SCREEN: Profile
+// ============================================================
+function showProfile() {
+    const p = childProfile;
+    const name      = p?.name         || 'Child';
+    const avatar    = p?.avatar        || '👦';
+    const age       = p?.age           ? `${p.age} years old` : '';
+    const parentName= p?.parent_name   || '—';
+    const phone     = p?.parent_phone  || '—';
+    const address   = p?.address       || '—';
+    const notes     = p?.medical_notes || '';
+
+    const phoneLink = p?.parent_phone
+        ? `<a href="tel:${p.parent_phone}" style="color:#60a5fa;">${p.parent_phone}</a>`
+        : '—';
+
+    watchScreen.innerHTML = `
+    <div class="profile-screen">
+      <div class="profile-avatar">${avatar}</div>
+      <div class="profile-name">${name}</div>
+      ${age ? `<div class="profile-age">${age}</div>` : ''}
+
+      <div class="profile-card">
+        <div class="profile-row">
+          <span class="profile-label">👨‍👩‍👧 Parent</span>
+          <span class="profile-value">${parentName}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">📞 Phone</span>
+          <span class="profile-value">${phoneLink}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">🏠 Home</span>
+          <span class="profile-value">${address}</span>
+        </div>
+        ${notes ? `
+        <div class="profile-row">
+          <span class="profile-label">🏥 Notes</span>
+          <span class="profile-value">${notes}</span>
+        </div>` : ''}
+      </div>
+
+      ${p?.parent_phone ? `
+      <a href="tel:${p.parent_phone}" class="call-btn">📞 Call Parent</a>
+      ` : ''}
+
+      <button class="sos-cancel-btn" onclick="showHomeScreen()" style="margin-top:10px;">← Back</button>
+    </div>
+  `;
+}
+
+// ============================================================
+// SCREEN: Navigation
 // ============================================================
 function startNavigation(routeIndex) {
     currentRoute = routes[routeIndex];
     currentStep = 0;
     showNavigationStep();
-
-    // Notify parent that navigation has started
     sendNotification('navigation_start', `Started navigating to ${currentRoute.route_name}`);
 }
 
@@ -154,23 +204,12 @@ function showNavigationStep() {
 
     const waypoints = currentRoute.waypoints;
     const wp = waypoints[currentStep];
+    if (!wp) { showComplete(); return; }
 
-    if (!wp) {
-        showComplete();
-        return;
-    }
+    let imageHtml = wp.image_url
+        ? `<img src="${wp.image_url}" alt="Step ${currentStep + 1}">`
+        : getInstructionEmoji(wp.instruction_text);
 
-    // Determine the image to show
-    let imageHtml;
-    if (wp.image_url) {
-        imageHtml = `<img src="${wp.image_url}" alt="Step ${currentStep + 1}">`;
-    } else {
-        // Use a context-appropriate emoji based on instruction text
-        const emoji = getInstructionEmoji(wp.instruction_text);
-        imageHtml = emoji;
-    }
-
-    // Progress dots
     let dotsHtml = '';
     waypoints.forEach((_, i) => {
         let cls = 'progress-dot';
@@ -182,26 +221,17 @@ function showNavigationStep() {
     watchScreen.innerHTML = `
     <div class="nav-screen">
       <div class="nav-step-indicator">STEP ${currentStep + 1} of ${waypoints.length}</div>
-
       <div class="nav-image">${imageHtml}</div>
-
       <div class="nav-instruction">${wp.instruction_text || 'Keep going!'}</div>
-
-      <button class="nav-voice-btn" onclick="playVoice()" id="voiceBtn" title="Play voice">
-        🔊
-      </button>
-
+      <button class="nav-voice-btn" onclick="playVoice()" id="voiceBtn" title="Play voice">🔊</button>
       <div class="progress-dots">${dotsHtml}</div>
-
       <button class="cancel-btn" onclick="cancelNavigation()" title="Cancel">✕</button>
     </div>
   `;
 
-    // Auto-play voice instruction if available
     if (wp.voice_url) {
         setTimeout(() => playVoice(), 500);
     } else if (wp.instruction_text) {
-        // Use browser TTS as fallback
         setTimeout(() => speakText(wp.instruction_text), 500);
     }
 }
@@ -214,22 +244,14 @@ let currentAudio = null;
 function playVoice() {
     const wp = currentRoute?.waypoints[currentStep];
     if (!wp) return;
-
     const btn = document.getElementById('voiceBtn');
-
     if (wp.voice_url) {
-        // Play recorded voice
-        if (currentAudio) {
-            currentAudio.pause();
-            currentAudio = null;
-        }
+        if (currentAudio) { currentAudio.pause(); currentAudio = null; }
         currentAudio = new Audio(wp.voice_url);
-        currentAudio.play().catch(() => { });
-
+        currentAudio.play().catch(() => {});
         btn.classList.add('playing');
         currentAudio.onended = () => btn.classList.remove('playing');
     } else if (wp.instruction_text) {
-        // TTS fallback
         speakText(wp.instruction_text);
         btn.classList.add('playing');
         setTimeout(() => btn.classList.remove('playing'), 2000);
@@ -239,71 +261,44 @@ function playVoice() {
 function speakText(text) {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.85; // Slightly slower for children
-        utterance.pitch = 1.1; // Slightly higher pitch, friendlier tone
-        utterance.volume = 1;
-        window.speechSynthesis.speak(utterance);
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.rate = 0.85; utt.pitch = 1.1; utt.volume = 1;
+        window.speechSynthesis.speak(utt);
     }
 }
 
 // ============================================================
-// Step Completion (GPS Proximity or Manual)
+// GPS & Step Completion
 // ============================================================
 function simulateStepComplete() {
-    if (!currentRoute) {
-        alert('No active navigation. Tap a destination on the watch first!');
-        return;
-    }
-
+    if (!currentRoute) { alert('No active navigation. Tap a destination first!'); return; }
     currentStep++;
-    if (currentStep >= currentRoute.waypoints.length) {
-        showComplete();
-    } else {
-        showNavigationStep();
-    }
+    if (currentStep >= currentRoute.waypoints.length) showComplete();
+    else showNavigationStep();
 }
 
-// Real GPS checking (for actual device use)
 function startGPSTracking() {
     if (!navigator.geolocation) return;
-
     navigator.geolocation.watchPosition(
         (pos) => {
-            currentPosition = {
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
-            };
-
+            currentPosition = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
             if (!currentRoute) return;
             const wp = currentRoute.waypoints[currentStep];
             if (!wp) return;
-
-            const distance = haversineDistance(
-                pos.coords.latitude, pos.coords.longitude,
-                wp.latitude, wp.longitude
-            );
-
-            // If within 30 meters of waypoint, advance to next step
-            if (distance < 30) {
+            const dist = haversineDistance(pos.coords.latitude, pos.coords.longitude, wp.latitude, wp.longitude);
+            if (dist < 30) {
                 currentStep++;
-                if (currentStep >= currentRoute.waypoints.length) {
-                    showComplete();
-                } else {
-                    showNavigationStep();
-                }
+                if (currentStep >= currentRoute.waypoints.length) showComplete();
+                else showNavigationStep();
             }
         },
-        () => { },
+        () => {},
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
 }
 
-// ---- Continuous location sending to backend ----
 function startLocationTracking() {
-    // Start GPS tracking for position updates
     startGPSTracking();
-
     // Send location to server every 10 seconds
     setInterval(async () => {
         if (!currentPosition) return;
@@ -313,13 +308,11 @@ function startLocationTracking() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     child_id: childId,
-                    latitude: currentPosition.latitude,
+                    latitude:  currentPosition.latitude,
                     longitude: currentPosition.longitude
                 })
             });
-        } catch (err) {
-            console.error('Failed to send location:', err);
-        }
+        } catch (err) { console.error('Failed to send location:', err); }
     }, 10000);
 }
 
@@ -327,9 +320,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -338,9 +329,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 // ============================================================
 function showComplete() {
     const routeName = currentRoute ? currentRoute.route_name : 'destination';
-    currentRoute = null;
-    currentStep = 0;
-
+    currentRoute = null; currentStep = 0;
     watchScreen.innerHTML = `
     <div class="complete-screen">
       <div class="complete-icon">🎉</div>
@@ -348,108 +337,80 @@ function showComplete() {
       <div class="complete-sub">Great job! 🌟</div>
     </div>
   `;
-
-    // Notify parent that navigation is complete
     sendNotification('navigation_complete', `Safely arrived at ${routeName}`);
-
-    // Speak congratulations
     speakText('Great job! You made it!');
-
-    // Return to home after 4 seconds
     setTimeout(() => showHomeScreen(), 4000);
 }
 
 // ============================================================
-// SCREEN: Cancel Navigation
+// SCREEN: Cancel / SOS / No Routes
 // ============================================================
 function cancelNavigation() {
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
-    }
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     window.speechSynthesis?.cancel();
-    currentRoute = null;
-    currentStep = 0;
+    currentRoute = null; currentStep = 0;
     showHomeScreen();
 }
 
-// ============================================================
-// SCREEN: SOS Emergency
-// ============================================================
 function showSOS() {
     watchScreen.innerHTML = `
     <div class="sos-screen">
       <div class="sos-icon">🚨</div>
       <div class="sos-text">HELP SENT!</div>
-      <p style="font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 15px;">
-        Guardian notified
-      </p>
-      <button class="sos-cancel-btn" onclick="showHomeScreen()">Go Back</button>
+      <p style="font-size:12px;color:rgba(255,255,255,0.7);margin-bottom:15px;">Guardian notified</p>
+      ${childProfile?.parent_phone ? `<a href="tel:${childProfile.parent_phone}" class="call-btn">📞 Call Parent</a>` : ''}
+      <button class="sos-cancel-btn" onclick="showHomeScreen()" style="margin-top:10px;">Go Back</button>
     </div>
   `;
-
-    // Send SOS notification to parent with location
     sendNotification('sos', '🚨 SOS! Child needs help immediately!', true);
-
     speakText('Help has been sent. Stay where you are.');
 }
 
-// ============================================================
-// SCREEN: No Routes
-// ============================================================
 function showNoRoutes() {
     watchScreen.innerHTML = `
     <div class="no-routes-screen">
       <div class="empty-icon">📭</div>
       <p>No routes yet!<br>Ask your guardian to create one.</p>
+      <button class="profile-btn" onclick="showProfile()" title="Profile" style="position:static;margin-top:15px;">👤 Profile</button>
     </div>
   `;
 }
 
 // ============================================================
-// Helper: Get emoji based on instruction text
+// Helpers
 // ============================================================
 function getInstructionEmoji(text) {
     if (!text) return '📍';
     const t = text.toLowerCase();
-    if (t.includes('left')) return '⬅️';
-    if (t.includes('right')) return '➡️';
+    if (t.includes('left'))   return '⬅️';
+    if (t.includes('right'))  return '➡️';
     if (t.includes('straight') || t.includes('ahead')) return '⬆️';
-    if (t.includes('cross') || t.includes('road')) return '🚦';
-    if (t.includes('tree')) return '🌳';
+    if (t.includes('cross') || t.includes('road'))     return '🚦';
     if (t.includes('school')) return '🏫';
-    if (t.includes('home')) return '🏠';
+    if (t.includes('home'))   return '🏠';
     if (t.includes('bus') || t.includes('stop')) return '🚌';
-    if (t.includes('gate')) return '🚪';
+    if (t.includes('gate'))   return '🚪';
+    if (t.includes('tree'))   return '🌳';
     if (t.includes('shop') || t.includes('store')) return '🏪';
-    if (t.includes('park')) return '🌳';
+    if (t.includes('park'))   return '🌳';
     if (t.includes('reach') || t.includes('arrived')) return '🎉';
     return '📍';
 }
 
-// ============================================================
-// Send Notification to Backend
-// ============================================================
 async function sendNotification(type, message, includeLocation = false) {
     try {
         const payload = { child_id: childId, type, message };
-
-        // Include location if available
         if (includeLocation && currentPosition) {
-            payload.latitude = currentPosition.latitude;
+            payload.latitude  = currentPosition.latitude;
             payload.longitude = currentPosition.longitude;
         }
-
         await fetch(`${API_BASE}/api/public/notifications`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        console.log(`Notification sent: [${type}] ${message}`);
-    } catch (err) {
-        console.error('Failed to send notification:', err);
-    }
+    } catch (err) { console.error('Notification failed:', err); }
 }
 
-// ---- Start! ----
+// ---- Start ----
 init();

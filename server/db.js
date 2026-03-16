@@ -47,9 +47,26 @@ async function initDB() {
       name TEXT NOT NULL,
       device_id TEXT,
       avatar TEXT DEFAULT '👦',
+      age INTEGER,
+      parent_name TEXT,
+      parent_phone TEXT,
+      address TEXT,
+      medical_notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Safe migrations for existing databases
+  const childMigrations = [
+    `ALTER TABLE children ADD COLUMN age INTEGER`,
+    `ALTER TABLE children ADD COLUMN parent_name TEXT`,
+    `ALTER TABLE children ADD COLUMN parent_phone TEXT`,
+    `ALTER TABLE children ADD COLUMN address TEXT`,
+    `ALTER TABLE children ADD COLUMN medical_notes TEXT`,
+  ];
+  for (const sql of childMigrations) {
+    try { db.run(sql); } catch (e) { /* column already exists */ }
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS routes (

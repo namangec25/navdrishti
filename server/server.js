@@ -44,6 +44,21 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', app: 'NavDrishti', timestamp: new Date().toISOString() });
 });
 
+// ---- Public child profile endpoint for watch app (no auth needed) ----
+app.get('/api/public/child/:childId', (req, res) => {
+    try {
+        const child = queryOne(
+            'SELECT id, name, avatar, age, parent_name, parent_phone, address, medical_notes FROM children WHERE id = ?',
+            [parseInt(req.params.childId)]
+        );
+        if (!child) return res.status(404).json({ error: 'Child not found' });
+        res.json({ child });
+    } catch (err) {
+        console.error('Public child profile error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ---- Public route endpoint for watch app (no auth needed) ----
 app.get('/api/public/routes/:childId', (req, res) => {
     try {

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🧭 NavDrishti - One Step at a Time Navigation
 
 **NavDrishti** helps children with dyslexia and cognitive challenges navigate simple daily routes independently using a smartwatch-style interface and guardian mobile app.
@@ -159,3 +160,6 @@ navdrishti/
 ## 📄 License
 
 MIT
+=======
+# navdrishti
+>>>>>>> 3c5004e87df748b7e837107270f199991e838061
